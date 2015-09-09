@@ -23,11 +23,8 @@ import com.squareup.okhttp.OkHttpClient;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.List;
 
 import retrofit.Call;
-import retrofit.GsonConverterFactory;
-import retrofit.Retrofit;
 
 
 public class MyService extends Service implements ConnectionCallbacks,
@@ -263,26 +260,27 @@ public class MyService extends Service implements ConnectionCallbacks,
             PolyService pService;
             Log.d(LOG_TAG, "start Retrofit");
             
-            pService = new ApiFactory.getPolyService();
+            pService = new ApiFactory().getPolyService();
             Log.d(LOG_TAG, "call Data");
-            Call<List<RestData>> call = pService.somedata("ololo");
+            Call<String> call = pService.regLocations("123","54.3","54.6","2015-09-09 10:39:00");
+            //Call<List<RestData>> call = pService.somedata("sdfsfs");
+
             try {
                 Log.d(LOG_TAG, "try Execute");
 
-                List<RestData> data = call.execute().body();
-
-
-                for (RestData d : data) {
+                String data = call.execute().body();
+                //List<RestData> data = call.execute().body();
+                Log.d(LOG_TAG, "Start return");
+                Log.d(LOG_TAG, "return: "+ data);
+                /*for (RestData d : data) {
                     Log.d(LOG_TAG, d.mKey + " - " + d.mValue);
-                }
+                }*/
 
             } catch (IOException e) {
                 e.printStackTrace();
             }
             return null;
         }
-
-
 
     }
 }

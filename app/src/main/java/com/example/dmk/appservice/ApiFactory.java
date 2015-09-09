@@ -27,7 +27,7 @@ public class ApiFactory {
     }
 
     @NonNull
-    public static PolyService getPolyService() {
+    public PolyService getPolyService() {
         return getRetrofit().create(PolyService.class);
     }
 
@@ -39,7 +39,5 @@ public class ApiFactory {
                 .client(CLIENT)
                 .build();
     }
-
-
 
 }
