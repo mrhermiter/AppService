@@ -6,11 +6,23 @@ import com.google.gson.annotations.SerializedName;
  * Created by dmk on 07.09.15.
  */
 public class RestData {
-    @SerializedName("key")
-    public String mKey;
+    @SerializedName("taskID")
+    public String dTaskID;
 
-    @SerializedName("value")
-    public String mValue;
+    @SerializedName("title")
+    public String dTitle;
+
+    @SerializedName("descr")
+    public String dDescr;
+
+    @SerializedName("latitude")
+    public String dLatitude;
+
+    @SerializedName("longitude")
+    public String dLongitude;
+
+    @SerializedName("timest")
+    public String dTimest;
 
     public RestData(){
 

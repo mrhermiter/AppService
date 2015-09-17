@@ -3,6 +3,7 @@ package com.example.dmk.appservice;
 import android.app.Service;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.location.Location;
@@ -22,7 +23,9 @@ import com.google.android.gms.location.LocationServices;
 import com.squareup.okhttp.OkHttpClient;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 
 import retrofit.Call;
 
@@ -52,8 +55,13 @@ public class MyService extends Service implements ConnectionCallbacks,
     public static final String CUR_LONG = "current_longitude";
     public static final String CUR_LAT = "current_latitude";
 
+    public static final String ERR_GET_TOKEN = "token_error";
+
     private DataBaseHelper mDatabaseHelper;
     private SQLiteDatabase mSqLiteDatabase;
+
+    private SharedPreferences spAuth;
+    private String cToken;
 
     public MyService() {
     }
@@ -72,6 +80,8 @@ public class MyService extends Service implements ConnectionCallbacks,
 
         mSqLiteDatabase = mDatabaseHelper.getWritableDatabase();
 
+
+
         if (checkPlayServices()) {
 
             // Building the GoogleApi client
@@ -83,10 +93,59 @@ public class MyService extends Service implements ConnectionCallbacks,
         Log.d(LOG_TAG, "MyService on create");
     }
 
+    public boolean isAuth(){
+        spAuth = getSharedPreferences(MainActivity.AUTH_PREFERENCES, MODE_PRIVATE);
+        if(spAuth.contains(MainActivity.AUTH_TOKEN_KEY)) {
+            cToken = spAuth.getString(MainActivity.AUTH_TOKEN_KEY,"");
+            return true;
+        }
+        return false;
+    }
+
+    public void authCourier(String cLogin, String cPass){
+        if(!cLogin.isEmpty() && !cPass.isEmpty()){
+            PolyService polyService = new ApiFactory().getPolyService();
+            Call<StatData> call = polyService.authCourier(cLogin, cPass);
+            try {
+                StatData data = call.execute().body();
+                if(data.mStatus.equalsIgnoreCase("ok") && !data.mData.isEmpty()) {
+                    String token = data.mData;
+
+                    spAuth = getSharedPreferences(MainActivity.AUTH_PREFERENCES, MODE_PRIVATE);
+                    SharedPreferences.Editor ed = spAuth.edit();
+                    ed.putString(MainActivity.AUTH_LOGIN_KEY, cLogin);
+                    ed.putString(MainActivity.AUTH_PASS_KEY, cPass);
+                    ed.putString(MainActivity.AUTH_TOKEN_KEY, token);
+                    ed.apply();
+                    cToken = token;
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
         Log.d(LOG_TAG, "MyService on start command");
+
+        if(intent.hasExtra(MainActivity.AUTH_LOGIN_KEY) && intent.hasExtra(MainActivity.AUTH_PASS_KEY)){
+            authCourier(intent.getStringExtra(MainActivity.AUTH_LOGIN_KEY), intent.getStringExtra(MainActivity.AUTH_PASS_KEY));
+        }
+
+        if(isAuth())
+            new GetTasksAsyncTask().execute(cToken);
+        else{
+            Intent intentUpdate = new Intent();
+            intentUpdate.setAction(ACTION_MYSERVICE);
+            intentUpdate.addCategory(Intent.CATEGORY_DEFAULT);
+            intentUpdate.putExtra(ERR_GET_TOKEN, R.string.error_token);
+            sendBroadcast(intentUpdate);
+        }
+
+
 
         if (mGoogleApiClient != null) {
             mGoogleApiClient.connect();
@@ -130,7 +189,7 @@ public class MyService extends Service implements ConnectionCallbacks,
             new MyAsyncTask().execute(Double.toString(latitude), Double.toString(longitude));
                     Log.d(LOG_TAG, latitude + ", " + longitude);
 
-            Cursor cursor = mSqLiteDatabase.query(DataBaseHelper.DATABASE_TABLE, new String[] {DataBaseHelper.LAT,
+            Cursor cursor = mSqLiteDatabase.query(DataBaseHelper.DATABASE_TABLE_LOCATIONS, new String[] {DataBaseHelper.LAT,
                             DataBaseHelper.LONG, DataBaseHelper.TST},
                     null, null,
                     null, null, null) ;
@@ -254,24 +313,26 @@ public class MyService extends Service implements ConnectionCallbacks,
 
             newValues.put(DataBaseHelper.LAT, params[0]);
             newValues.put(DataBaseHelper.LONG, params[1]);
-            newValues.put(DataBaseHelper.TST, new Date().toString());
+            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String tst = dateFormat.format(new Date()).toString();
+            newValues.put(DataBaseHelper.TST, tst);
 
-            mSqLiteDatabase.insert(DataBaseHelper.DATABASE_TABLE, null, newValues);
+            mSqLiteDatabase.insert(DataBaseHelper.DATABASE_TABLE_LOCATIONS, null, newValues);
             PolyService pService;
             Log.d(LOG_TAG, "start Retrofit");
             
             pService = new ApiFactory().getPolyService();
             Log.d(LOG_TAG, "call Data");
-            Call<String> call = pService.regLocations("123","54.3","54.6","2015-09-09 10:39:00");
+            Call<StatData> call = pService.regLocations("123",params[0],params[1],tst);
             //Call<List<RestData>> call = pService.somedata("sdfsfs");
 
             try {
                 Log.d(LOG_TAG, "try Execute");
 
-                String data = call.execute().body();
+                StatData data = call.execute().body();
                 //List<RestData> data = call.execute().body();
-                Log.d(LOG_TAG, "Start return");
-                Log.d(LOG_TAG, "return: "+ data);
+
+                Log.d(LOG_TAG, "return: status = " + data.mStatus + "; error = " + data.mError);
                 /*for (RestData d : data) {
                     Log.d(LOG_TAG, d.mKey + " - " + d.mValue);
                 }*/
@@ -282,5 +343,51 @@ public class MyService extends Service implements ConnectionCallbacks,
             return null;
         }
 
+    }
+
+    class GetTasksAsyncTask extends AsyncTask<String, Void, Void>{
+
+        @Override
+        protected Void doInBackground(String... params) {
+            PolyService pService = new ApiFactory().getPolyService();
+            Call<List<RestData>> call = pService.getTasks(params[0]);
+            try {
+                List<RestData> tasks = call.execute().body();
+                for (RestData d : tasks) {
+                    Log.d(LOG_TAG, d.dTaskID + " - " + d.dTitle + " - " + d.dDescr + " - " + d.dLatitude + " - " + d.dLongitude + " - " + d.dTimest);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
+
+    class AuthCourierAsyncTask extends AsyncTask<String, Void, String>{
+        @Override
+        protected String doInBackground(String... params) {
+            if(!params[0].isEmpty() && !params[1].isEmpty()){
+                PolyService polyService = new ApiFactory().getPolyService();
+                Call<StatData> call = polyService.authCourier(params[0], params[1]);
+                try {
+                    StatData data = call.execute().body();
+                    if(data.mStatus.equalsIgnoreCase("ok") && !data.mData.isEmpty()) {
+                        String token = data.mData;
+
+                        spAuth = getSharedPreferences(MainActivity.AUTH_PREFERENCES, MODE_PRIVATE);
+                        SharedPreferences.Editor ed = spAuth.edit();
+                        ed.putString(MainActivity.AUTH_LOGIN_KEY, params[0]);
+                        ed.putString(MainActivity.AUTH_PASS_KEY, params[1]);
+                        ed.putString(MainActivity.AUTH_TOKEN_KEY, token);
+                        ed.commit();
+                        return token;
+                    }
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            return null;
+        }
     }
 }

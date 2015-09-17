@@ -14,11 +14,14 @@ import retrofit.http.Query;
  */
 public interface PolyService {
 
-    @GET("/polyapi")
-    Call<List<RestData>> somedata(@Query("getData") String key);
+    @GET("/polyapi/?action=getTasks")
+    Call<List<RestData>> getTasks(@Query("cToken") String cToken);
 
     @FormUrlEncoded
-    @POST("/polyapi/?regLocations=1")
-    Call<String> regLocations(@Field("courierID") String cID, @Field("latitude") String latL, @Field("longitude") String longL, @Field("timest") String tst);
+    @POST("/polyapi/?action=regLocations")
+    Call<StatData> regLocations(@Field("courierID") String cID, @Field("latitude") String latL, @Field("longitude") String longL, @Field("timest") String tst);
+
+    @GET("/polyapi/?action=authCourier")
+    Call<StatData> authCourier(@Query("cLogin") String cLogin, @Query("cPass") String cPass);
 
 }
